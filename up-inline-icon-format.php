@@ -3,7 +3,7 @@
  * Plugin Name: UP Inline Icon Format
  * Description: Ajoute un format RichText pour insérer des icônes inline à partir d'une police SVG (liste des glyphes + insertion au caret).
  * Author: UP
- * Version: 0.1.0
+ * Version: 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -68,17 +68,27 @@ function up_iif_parse_icon_css( $css_path ) {
     if ( preg_match( '/@font-face\s*\{[^}]*font-family\s*:\s*([\"\'])([^\"\']+)\1/mi', $css, $mff ) ) {
         $result['family'] = trim( $mff[2] );
     }
-    // Match .class:before or .class::before { content:'\XXXX' } (1-6 hex), with single or double quotes
-    if ( preg_match_all( '/\.([A-Za-z0-9_-]+)\s*::?before\s*\{[^}]*content\s*:\s*(["\'])\\\\([0-9A-Fa-f]{1,6})\2[^}]*\}/i', $css, $m, PREG_SET_ORDER ) ) {
-        foreach ( $m as $match ) {
-            $cls = $match[1];
-            $hex = $match[3];
-            $code = strtoupper( $hex );
-            $result['icons'][] = array(
-                'class' => $cls,
-                'code'  => $code,
-            );
+    // Match .class:before/.class::before { content:'\\XXXX' } and also plain .class { content:'\\XXXX' }
+    $icons = array();
+    if ( preg_match_all( '/\.([A-Za-z0-9_-]+)\s*::?before\s*\{[^}]*content\s*:\s*(["\'])\\\\([0-9A-Fa-f]{1,6})\2[^}]*\}/i', $css, $m1, PREG_SET_ORDER ) ) {
+        foreach ( $m1 as $match ) {
+            $icons[$match[1]] = strtoupper( $match[3] );
         }
+    }
+    if ( preg_match_all( '/\.([A-Za-z0-9_-]+)\s*\{[^}]*content\s*:\s*(["\'])\\\\([0-9A-Fa-f]{1,6})\2[^}]*\}/i', $css, $m2, PREG_SET_ORDER ) ) {
+        foreach ( $m2 as $match ) {
+            $cls = $match[1];
+            // Avoid overriding :before-defined entries
+            if ( ! isset( $icons[$cls] ) ) {
+                $icons[$cls] = strtoupper( $match[3] );
+            }
+        }
+    }
+    foreach ( $icons as $cls => $code ) {
+        $result['icons'][] = array(
+            'class' => $cls,
+            'code'  => $code,
+        );
     }
     return $result;
 }
@@ -126,7 +136,7 @@ function up_iif_list_theme_fonts() {
     return $fonts;
 }
 
-define( 'UP_IIF_VERSION', '0.1.0' );
+define( 'UP_IIF_VERSION', '1.0.0' );
 define( 'UP_IIF_PLUGIN_FILE', __FILE__ );
 define( 'UP_IIF_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'UP_IIF_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
