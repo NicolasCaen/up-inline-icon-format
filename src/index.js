@@ -15,6 +15,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
     const [iconPacks, setIconPacks] = useState(initialPacks);
     const [packIndex, setPackIndex] = useState( initialPacks.length ? 0 : -1 );
     const [selectedIcon, setSelectedIcon] = useState(null); // { class, code }
+    const [pendingHex, setPendingHex] = useState('');
     const [currentEl, setCurrentEl] = useState(null); // existing span.up-inline-icon under caret
     // Style controls state must be declared before effects that depend on them
     const [sizeSlug, setSizeSlug] = useState('');
@@ -28,11 +29,49 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
             fontSizes: s.fontSizes || [],
             colors: s.colors || []
         };
+
+    // Live update when glyph changes while editing an existing element
+    useEffect(()=>{
+        if (!open || !currentEl || !currentEl.parentNode || !selectedIcon) return;
+        const fontName = (iconPacks[packIndex]?.family || '').toString();
+        const hexCode = String(selectedIcon.code).toUpperCase();
+        const charToInsert = toChar(hexCode);
+        if (!charToInsert) return;
+        const styleParts = [];
+        const fontSizeCss = sizeSlug ? `var(--wp--preset--font-size--${sizeSlug})` : (sizeCustom || '').trim();
+        if (fontSizeCss) styleParts.push(`font-size:${fontSizeCss};`);
+        const colorCss = colorSlug ? `var(--wp--preset--color--${colorSlug})` : (colorCustom || '').trim();
+        if (colorCss) styleParts.push(`color:${colorCss};`);
+        const styleAttr = styleParts.join(' ');
+        const utilClasses = [];
+        if (sizeSlug) utilClasses.push(`has-${sizeSlug}-font-size`);
+        if (colorSlug) { utilClasses.push('has-text-color'); utilClasses.push(`has-${colorSlug}-color`); }
+        if (fontName) {
+            const famSlug = slugify(fontName);
+            if (famSlug) utilClasses.push(`has-${famSlug}-font-family`);
+        }
+        const classAttr = ['up-inline-icon', selectedIcon.class].concat(utilClasses).join(' ').trim();
+        const attrs = {
+            class: classAttr,
+            'data-font': fontName,
+            'data-code': hexCode,
+            'aria-hidden': 'true',
+            ...(styleAttr ? { style: styleAttr } : {})
+        };
+        let start = value.start, end = value.end;
+        if (start === end) {
+            if (start > 0) { start = start - 1; } else { start = 0; end = Math.min(1, value.text.length||1); }
+        }
+        const working = insert( value, charToInsert, start, end );
+        const applied = applyFormat( working, { type: TYPE, attributes: attrs }, start, start + charToInsert.length );
+        onChange( applied );
+        // keep popup open for further edits
+    }, [selectedIcon]);
     }, []);
 
     // Live update of existing element when controls change
     useEffect(()=>{
-        if (!open || !currentEl || !currentEl.isConnected) return;
+        if (!open) return;
         try {
             const doc = (contentRef && contentRef.current && contentRef.current.ownerDocument) ? contentRef.current.ownerDocument : (typeof document !== 'undefined' ? document : null);
             if (!doc || !doc.getSelection) return;
@@ -44,16 +83,26 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
             if (!el) return;
             // font family -> select pack
             const fam = el.getAttribute('data-font') || '';
+            let idx = -1;
             if (fam) {
-                const idx = iconPacks.findIndex(p => (p.family||'').toString() === fam);
+                idx = iconPacks.findIndex(p => (p.family||'').toString() === fam);
                 if (idx >= 0) setPackIndex(idx);
             }
             // glyph by data-code
-            const dataCodeChar = el.getAttribute('data-code');
-            if (dataCodeChar && packIndex >= 0 && iconPacks[packIndex]) {
-                const hex = dataCodeChar.codePointAt(0).toString(16).toUpperCase();
-                const found = (iconPacks[packIndex]?.icons||[]).find(ic => ic.code.toUpperCase() === hex);
-                if (found) setSelectedIcon(found);
+            const dataCodeAttr = el.getAttribute('data-code');
+            if (dataCodeAttr) {
+                const hex = isHex(dataCodeAttr) ? dataCodeAttr.toUpperCase() : (dataCodeAttr.codePointAt(0)?.toString(16).toUpperCase() || '');
+                if (hex) {
+                    // Try immediate resolution with local idx, else defer
+                    const pIdx = idx >= 0 ? idx : packIndex;
+                    const base = (pIdx >= 0) ? iconPacks[pIdx] : null;
+                    if (base && Array.isArray(base.icons)) {
+                        const found = base.icons.find(ic => ic.code.toUpperCase() === hex);
+                        if (found) setSelectedIcon(found); else setPendingHex(hex);
+                    } else {
+                        setPendingHex(hex);
+                    }
+                }
             }
             // classes for presets
             const cls = el.className || '';
@@ -70,12 +119,24 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
         } catch(e) {}
     }, [open, contentRef]);
 
+    // Resolve pending hex once packIndex is ready
+    useEffect(()=>{
+        if (!open || !pendingHex) return;
+        const base = (packIndex >= 0) ? iconPacks[packIndex] : null;
+        if (base && Array.isArray(base.icons)) {
+            const found = base.icons.find(ic => ic.code.toUpperCase() === pendingHex.toUpperCase());
+            if (found) { setSelectedIcon(found); setPendingHex(''); }
+        }
+    }, [open, pendingHex, packIndex, iconPacks]);
+
     useEffect(()=>{
         if (!open || !currentEl || !currentEl.isConnected) return;
         try {
             const fontName = (iconPacks[packIndex]?.family || '').toString();
-            const codeHex = selectedIcon ? selectedIcon.code : (currentEl.getAttribute('data-code') ? currentEl.getAttribute('data-code').codePointAt(0).toString(16).toUpperCase() : '');
-            const charToInsert = selectedIcon ? toChar(selectedIcon.code) : currentEl.textContent;
+            const dc = currentEl.getAttribute('data-code') || '';
+            const existingHex = isHex(dc) ? dc.toUpperCase() : charToHex(currentEl.textContent || '');
+            const hexCode = selectedIcon ? String(selectedIcon.code).toUpperCase() : existingHex;
+            const charToInsert = hexCode ? toChar(hexCode) : '';
             // Build style
             const styleParts = [];
             const fontSizeCss = sizeSlug ? `var(--wp--preset--font-size--${sizeSlug})` : (sizeCustom || '').trim();
@@ -94,9 +155,22 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
             // Apply
             currentEl.className = classAttr;
             if (fontName) currentEl.setAttribute('data-font', fontName);
-            if (selectedIcon) currentEl.setAttribute('data-code', charToInsert);
+            if (hexCode) currentEl.setAttribute('data-code', hexCode);
             if (styleAttr) currentEl.setAttribute('style', styleAttr); else currentEl.removeAttribute('style');
-            if (selectedIcon && charToInsert) currentEl.textContent = charToInsert;
+            if (charToInsert) {
+                // Force update through editor API instead of direct DOM manipulation
+                const range = document.createRange();
+                range.selectNodeContents(currentEl);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                
+                // Use execCommand to ensure Gutenberg tracks the change
+                document.execCommand('insertText', false, charToInsert);
+                
+                // Clear selection
+                selection.removeAllRanges();
+            }
         } catch(e) {}
     }, [open, currentEl, selectedIcon, sizeSlug, sizeCustom, colorSlug, colorCustom, packIndex]);
 
@@ -111,11 +185,18 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
         if (!Number.isNaN(code)) return String.fromCodePoint(code);
         return '';
     };
+    const isHex = (s='') => /^[0-9a-fA-F]{1,6}$/.test(String(s));
+    const charToHex = (ch='') => {
+        if (!ch) return '';
+        const cp = ch.codePointAt(0);
+        return cp ? cp.toString(16).toUpperCase() : '';
+    };
 
     const doInsert = () => {
         if (packIndex < 0 || !selectedIcon) { setOpen(false); return; }
         const fontName = (iconPacks[packIndex]?.family || '').toString();
-        const charToInsert = toChar(selectedIcon.code);
+        const hexCode = (selectedIcon && selectedIcon.code) ? String(selectedIcon.code).toUpperCase() : '';
+        const charToInsert = hexCode ? toChar(hexCode) : '';
         if (!charToInsert) { setOpen(false); return; }
         // Build inline style from size/color (inherit by default)
         const styleParts = [];
@@ -136,19 +217,20 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
         const attrs = {
             class: classAttr,
             'data-font': fontName,
-            'data-code': charToInsert,
+            'data-code': hexCode,
             'aria-hidden': 'true',
             ...(styleAttr ? { style: styleAttr } : {})
         };
-        // If we are editing an existing icon span, update it in place
+        // If we are editing an existing icon span, update via RichText value replacement
         if (currentEl && currentEl.parentNode) {
-            try {
-                currentEl.className = attrs.class;
-                currentEl.setAttribute('data-font', attrs['data-font']);
-                currentEl.setAttribute('data-code', attrs['data-code']);
-                if (attrs.style) currentEl.setAttribute('style', attrs.style); else currentEl.removeAttribute('style');
-                currentEl.textContent = charToInsert;
-            } catch(e) {}
+            let start = value.start, end = value.end;
+            if (start === end) {
+                // replace the character under/just before caret
+                if (start > 0) { start = start - 1; } else { start = 0; end = Math.min(1, value.text.length||1); }
+            }
+            let working = insert( value, charToInsert, start, end );
+            const applied = applyFormat( working, { type: TYPE, attributes: attrs }, start, start + charToInsert.length );
+            onChange( applied );
             setOpen(false);
             return;
         }
