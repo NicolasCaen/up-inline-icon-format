@@ -108,8 +108,9 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
             const cls = el.className || '';
             const fsMatch = cls.match(/has-([a-z0-9-]+)-font-size/);
             setSizeSlug(fsMatch ? fsMatch[1] : '');
-            const colorMatch = cls.match(/has-([a-z0-9-]+)-color/);
-            setColorSlug(colorMatch ? colorMatch[1] : '');
+            const colorMatches = Array.from(cls.matchAll(/has-([a-z0-9-]+)-color/g)).map(m=>m[1]);
+            const presetColor = colorMatches.find(slug => slug !== 'text') || '';
+            setColorSlug(presetColor);
             // style inline overrides
             const style = el.getAttribute('style') || '';
             const fsInline = style.match(/font-size\s*:\s*([^;]+)/i);
