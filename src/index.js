@@ -38,19 +38,17 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
         const charToInsert = toChar(hexCode);
         if (!charToInsert) return;
         const styleParts = [];
-        const fontSizeCss = sizeSlug ? `var(--wp--preset--font-size--${sizeSlug})` : (sizeCustom || '').trim();
+        if (fontName) styleParts.push(`font-family:${fontName};`);
+        let fontSizeCss = '';
+        if (sizeSlug === '__custom__') fontSizeCss = (sizeCustom || '').trim();
+        else if (sizeSlug) fontSizeCss = `var(--wp--preset--font-size--${sizeSlug})`;
         if (fontSizeCss) styleParts.push(`font-size:${fontSizeCss};`);
-        const colorCss = colorSlug ? `var(--wp--preset--color--${colorSlug})` : (colorCustom || '').trim();
+        let colorCss = '';
+        if (colorSlug === '__custom__') colorCss = (colorCustom || '').trim();
+        else if (colorSlug) colorCss = `var(--wp--preset--color--${colorSlug})`;
         if (colorCss) styleParts.push(`color:${colorCss};`);
         const styleAttr = styleParts.join(' ');
-        const utilClasses = [];
-        if (sizeSlug) utilClasses.push(`has-${sizeSlug}-font-size`);
-        if (colorSlug) { utilClasses.push('has-text-color'); utilClasses.push(`has-${colorSlug}-color`); }
-        if (fontName) {
-            const famSlug = slugify(fontName);
-            if (famSlug) utilClasses.push(`has-${famSlug}-font-family`);
-        }
-        const classAttr = ['up-inline-icon', selectedIcon.class].concat(utilClasses).join(' ').trim();
+        const classAttr = ['up-inline-icon', selectedIcon.class].join(' ').trim();
         const attrs = {
             class: classAttr,
             'data-font': fontName,
@@ -104,19 +102,35 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                     }
                 }
             }
-            // classes for presets
-            const cls = el.className || '';
-            const fsMatch = cls.match(/has-([a-z0-9-]+)-font-size/);
-            setSizeSlug(fsMatch ? fsMatch[1] : '');
-            const colorMatches = Array.from(cls.matchAll(/has-([a-z0-9-]+)-color/g)).map(m=>m[1]);
-            const presetColor = colorMatches.find(slug => slug !== 'text') || '';
-            setColorSlug(presetColor);
-            // style inline overrides
+            // Hydrate from style only (size/color/family)
             const style = el.getAttribute('style') || '';
+            // size
             const fsInline = style.match(/font-size\s*:\s*([^;]+)/i);
-            setSizeCustom(fsInline ? fsInline[1].trim() : '');
+            const fsVal = fsInline ? fsInline[1].trim() : '';
+            if (fsVal) {
+                const m = fsVal.match(/var\(\s*--wp--preset--font-size--([^)\s]+)\s*\)/i);
+                if (m) { setSizeSlug(m[1]); setSizeCustom(''); }
+                else { setSizeSlug('__custom__'); setSizeCustom(fsVal); }
+            } else {
+                setSizeSlug(''); setSizeCustom('');
+            }
+            // color
             const colInline = style.match(/color\s*:\s*([^;]+)/i);
-            setColorCustom(colInline ? colInline[1].trim() : '');
+            const colVal = colInline ? colInline[1].trim() : '';
+            if (colVal) {
+                const m = colVal.match(/var\(\s*--wp--preset--color--([^)\s]+)\s*\)/i);
+                if (m) { setColorSlug(m[1]); setColorCustom(''); }
+                else { setColorSlug('__custom__'); setColorCustom(colVal); }
+            } else {
+                setColorSlug(''); setColorCustom('');
+            }
+            // font-family
+            const ffInline = style.match(/font-family\s*:\s*([^;]+)/i);
+            const famName = (ffInline ? ffInline[1].trim() : '') || el.getAttribute('data-font') || '';
+            if (famName) {
+                const idx = iconPacks.findIndex(p => (p.family||'').toString() === famName);
+                if (idx >= 0) setPackIndex(idx);
+            }
         } catch(e) {}
     }, [open, contentRef]);
 
@@ -140,38 +154,24 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
             const charToInsert = hexCode ? toChar(hexCode) : '';
             // Build style
             const styleParts = [];
-            const fontSizeCss = sizeSlug ? `var(--wp--preset--font-size--${sizeSlug})` : (sizeCustom || '').trim();
+            if (fontName) styleParts.push(`font-family:${fontName};`);
+            let fontSizeCss = '';
+            if (sizeSlug === '__custom__') fontSizeCss = (sizeCustom || '').trim();
+            else if (sizeSlug) fontSizeCss = `var(--wp--preset--font-size--${sizeSlug})`;
             if (fontSizeCss) styleParts.push(`font-size:${fontSizeCss};`);
-            const colorCss = colorSlug ? `var(--wp--preset--color--${colorSlug})` : (colorCustom || '').trim();
+            let colorCss = '';
+            if (colorSlug === '__custom__') colorCss = (colorCustom || '').trim();
+            else if (colorSlug) colorCss = `var(--wp--preset--color--${colorSlug})`;
             if (colorCss) styleParts.push(`color:${colorCss};`);
             const styleAttr = styleParts.join(' ');
-            // Classes utilitaires
-            const utilClasses = [];
-            if (sizeSlug) utilClasses.push(`has-${sizeSlug}-font-size`);
-            if (colorSlug) { utilClasses.push('has-text-color'); utilClasses.push(`has-${colorSlug}-color`); }
-            const famSlug = fontName ? slugify(fontName) : '';
-            if (famSlug) utilClasses.push(`has-${famSlug}-font-family`);
             const glyphClass = selectedIcon ? selectedIcon.class : (currentEl.className.match(/\b([^\s]+)\b/) && currentEl.className.split(' ').find(c=>c!=='up-inline-icon' && !c.startsWith('has-')) ) || '';
-            const classAttr = ['up-inline-icon'].concat(glyphClass?[glyphClass]:[]).concat(utilClasses).join(' ').trim();
+            const classAttr = ['up-inline-icon'].concat(glyphClass?[glyphClass]:[]).join(' ').trim();
             // Apply
             currentEl.className = classAttr;
             if (fontName) currentEl.setAttribute('data-font', fontName);
             if (hexCode) currentEl.setAttribute('data-code', hexCode);
             if (styleAttr) currentEl.setAttribute('style', styleAttr); else currentEl.removeAttribute('style');
-            if (charToInsert) {
-                // Force update through editor API instead of direct DOM manipulation
-                const range = document.createRange();
-                range.selectNodeContents(currentEl);
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-                
-                // Use execCommand to ensure Gutenberg tracks the change
-                document.execCommand('insertText', false, charToInsert);
-                
-                // Clear selection
-                selection.removeAllRanges();
-            }
+            // Do not touch text here to avoid stealing focus from inputs; text is handled elsewhere when needed
         } catch(e) {}
     }, [open, currentEl, selectedIcon, sizeSlug, sizeCustom, colorSlug, colorCustom, packIndex]);
 
@@ -201,20 +201,17 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
         if (!charToInsert) { setOpen(false); return; }
         // Build inline style from size/color (inherit by default)
         const styleParts = [];
-        const fontSizeCss = sizeSlug ? `var(--wp--preset--font-size--${sizeSlug})` : (sizeCustom || '').trim();
+        if (fontName) styleParts.push(`font-family:${fontName};`);
+        let fontSizeCss = '';
+        if (sizeSlug === '__custom__') fontSizeCss = (sizeCustom || '').trim();
+        else if (sizeSlug) fontSizeCss = `var(--wp--preset--font-size--${sizeSlug})`;
         if (fontSizeCss) styleParts.push(`font-size:${fontSizeCss};`);
-        const colorCss = colorSlug ? `var(--wp--preset--color--${colorSlug})` : (colorCustom || '').trim();
+        let colorCss = '';
+        if (colorSlug === '__custom__') colorCss = (colorCustom || '').trim();
+        else if (colorSlug) colorCss = `var(--wp--preset--color--${colorSlug})`;
         if (colorCss) styleParts.push(`color:${colorCss};`);
         const styleAttr = styleParts.join(' ');
-        // Build utility classes for WP presets
-        const utilClasses = [];
-        if (sizeSlug) utilClasses.push(`has-${sizeSlug}-font-size`);
-        if (colorSlug) { utilClasses.push('has-text-color'); utilClasses.push(`has-${colorSlug}-color`); }
-        if (fontName) {
-            const famSlug = slugify(fontName);
-            if (famSlug) utilClasses.push(`has-${famSlug}-font-family`);
-        }
-        const classAttr = ['up-inline-icon', selectedIcon.class].concat(utilClasses).join(' ').trim();
+        const classAttr = ['up-inline-icon', selectedIcon.class].join(' ').trim();
         const attrs = {
             class: classAttr,
             'data-font': fontName,
@@ -305,7 +302,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                             <SelectControl
                                 label={ __('Taille', 'up-iif') }
                                 value={ sizeSlug }
-                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
+                                options={[{ label: __('Hérité', 'up-iif'), value: '' }, { label: __('Personnalisé', 'up-iif'), value: '__custom__' }].concat(
                                     (settings.fontSizes || []).map(fs=>({ label: fs.name || fs.slug, value: fs.slug }))
                                 )}
                                 onChange={ (v)=> setSizeSlug(v) }
@@ -314,7 +311,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                                 label={ __('Taille personnalisée', 'up-iif') }
                                 value={ sizeCustom }
                                 placeholder="16px, 1rem"
-                                onChange={ setSizeCustom }
+                                onChange={ (v)=> { setSizeCustom(v); if (v && sizeSlug !== '__custom__') setSizeSlug('__custom__'); } }
                             />
                         </div>
                         {/* Color + custom side-by-side */}
@@ -322,7 +319,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                             <SelectControl
                                 label={ __('Couleur', 'up-iif') }
                                 value={ colorSlug }
-                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
+                                options={[{ label: __('Hérité', 'up-iif'), value: '' }, { label: __('Personnalisé', 'up-iif'), value: '__custom__' }].concat(
                                     (settings.colors || []).map(c=>({ label: c.name || c.slug, value: c.slug }))
                                 )}
                                 onChange={ (v)=> setColorSlug(v) }
@@ -331,7 +328,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                                 label={ __('Couleur personnalisée', 'up-iif') }
                                 value={ colorCustom }
                                 placeholder="#000000"
-                                onChange={ setColorCustom }
+                                onChange={ (v)=> { setColorCustom(v); if (v && colorSlug !== '__custom__') setColorSlug('__custom__'); } }
                             />
                         </div>
                         <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
