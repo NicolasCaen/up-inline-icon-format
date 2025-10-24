@@ -196,40 +196,7 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                                 { __('Aucune police CSS détectée. Importez un ZIP via Réglages → Icônes inline.', 'up-iif') }
                             </div>
                         ) }
-                        {/* Size control */}
-                        <div style={{ marginTop: 8 }}>
-                            <SelectControl
-                                label={ __('Taille', 'up-iif') }
-                                value={ sizeSlug }
-                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
-                                    (settings.fontSizes || []).map(fs=>({ label: fs.name || fs.slug, value: fs.slug }))
-                                )}
-                                onChange={ (v)=> setSizeSlug(v) }
-                            />
-                            <TextControl
-                                label={ __('Taille personnalisée (ex: 16px, 1rem)', 'up-iif') }
-                                value={ sizeCustom }
-                                placeholder=""
-                                onChange={ setSizeCustom }
-                            />
-                        </div>
-                        {/* Color control */}
-                        <div style={{ marginTop: 8 }}>
-                            <SelectControl
-                                label={ __('Couleur', 'up-iif') }
-                                value={ colorSlug }
-                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
-                                    (settings.colors || []).map(c=>({ label: c.name || c.slug, value: c.slug }))
-                                )}
-                                onChange={ (v)=> setColorSlug(v) }
-                            />
-                            <TextControl
-                                label={ __('Couleur personnalisée (ex: #333333)', 'up-iif') }
-                                value={ colorCustom }
-                                placeholder="#000000"
-                                onChange={ setColorCustom }
-                            />
-                        </div>
+                        {/* Glyph grid right below font select */}
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:8, marginTop:8 }}>
                             { (packIndex>=0 ? (iconPacks[packIndex]?.icons || []) : []).map((ic, idx)=>{
                                 const codeChar = toChar(ic.code);
@@ -249,6 +216,40 @@ function InlineIconUI( { isActive, value, onChange, contentRef } ) {
                                     </button>
                                 );
                             })}
+                        </div>
+                        {/* Size + custom side-by-side */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:8 }}>
+                            <SelectControl
+                                label={ __('Taille', 'up-iif') }
+                                value={ sizeSlug }
+                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
+                                    (settings.fontSizes || []).map(fs=>({ label: fs.name || fs.slug, value: fs.slug }))
+                                )}
+                                onChange={ (v)=> setSizeSlug(v) }
+                            />
+                            <TextControl
+                                label={ __('Taille personnalisée', 'up-iif') }
+                                value={ sizeCustom }
+                                placeholder="16px, 1rem"
+                                onChange={ setSizeCustom }
+                            />
+                        </div>
+                        {/* Color + custom side-by-side */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:8 }}>
+                            <SelectControl
+                                label={ __('Couleur', 'up-iif') }
+                                value={ colorSlug }
+                                options={[{ label: __('Hérité', 'up-iif'), value: '' }].concat(
+                                    (settings.colors || []).map(c=>({ label: c.name || c.slug, value: c.slug }))
+                                )}
+                                onChange={ (v)=> setColorSlug(v) }
+                            />
+                            <TextControl
+                                label={ __('Couleur personnalisée', 'up-iif') }
+                                value={ colorCustom }
+                                placeholder="#000000"
+                                onChange={ setColorCustom }
+                            />
                         </div>
                         <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
                             <Button variant="secondary" onClick={()=> setOpen(false)}>{ __('Annuler', 'up-iif') }</Button>
